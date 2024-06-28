@@ -1,5 +1,6 @@
 import { D1Database, D1Response } from '@cloudflare/workers-types'
 import {
+  ConnectionInfo,
   Debug,
   DriverAdapter,
   err,
@@ -80,7 +81,7 @@ class D1Queryable<ClientT extends StdClient> implements Queryable {
     debug(`${tag} %O`, query)
 
     const res = await this.performIO(query, true)
-    return res.map((result) => (result as D1Response).meta.rows_written ?? 0)
+    return res.map((result) => (result as D1Response).meta.changes ?? 0)
   }
 
   private async performIO(query: Query, executeRaw = false): Promise<Result<PerformIOResult>> {
@@ -152,11 +153,17 @@ export class PrismaD1 extends D1Queryable<StdClient> implements DriverAdapter {
    * await prisma.$transaction([ ...moreQueries ])
    * ```
    */
-  warnOnce = (key: string, message: string, ...args: unknown[]) => {
+  private warnOnce = (key: string, message: string, ...args: unknown[]) => {
     if (!this.alreadyWarned.has(key)) {
       this.alreadyWarned.add(key)
       console.info(`${this.tags.warn} ${message}`, ...args)
     }
+  }
+
+  getConnectionInfo(): Result<ConnectionInfo> {
+    return ok({
+      maxBindValues: 98,
+    })
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -171,7 +178,7 @@ export class PrismaD1 extends D1Queryable<StdClient> implements DriverAdapter {
 
     this.warnOnce(
       'D1 Transaction',
-      "Cloudflare D1 - currently in Beta - does not support transactions. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and ran as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions",
+      "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions",
     )
 
     return ok(new D1Transaction(this.client, options))
